@@ -11,13 +11,12 @@ env:
   WORKING_DIR: "."
 
 permissions:
-  contents: write
-  pull-requests: write
+  contents: read
 
 jobs:
 
   # =====================================================
-  # SCANNING
+  # SECURITY SCAN
   # =====================================================
 
   terraform-scan:
@@ -29,33 +28,53 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
+      # -----------------------------
+      # TFLint
+      # -----------------------------
+
       - name: Setup TFLint
         uses: terraform-linters/setup-tflint@v5
 
       - name: Initialize TFLint
+        working-directory: ${{ env.WORKING_DIR }}
         run: tflint --init
 
       - name: Run TFLint
+        working-directory: ${{ env.WORKING_DIR }}
         run: tflint --recursive
+
+      # -----------------------------
+      # tfsec
+      # -----------------------------
 
       - name: Run tfsec
         uses: aquasecurity/tfsec-action@v1.0.3
+        with:
+          working_directory: ${{ env.WORKING_DIR }}
 
 
   # =====================================================
-  # FEATURE → PLAN
+  # FEATURE BRANCH
+  # Init -> Fmt -> Validate -> Plan
   # =====================================================
 
   terraform-plan:
     name: Terraform Plan - Feature
+
     if: github.ref == 'refs/heads/Feature'
+
     needs: terraform-scan
+
     runs-on: ubuntu-latest
 
     steps:
 
       - name: Checkout Code
         uses: actions/checkout@v4
+
+      # -----------------------------
+      # Azure Login
+      # -----------------------------
 
       - name: Azure Login
         uses: azure/login@v3
@@ -69,75 +88,112 @@ jobs:
               "subscriptionId": "2eeb0869-d474-4f94-a0b0-fb6a5d23d142"
             }
 
+      # -----------------------------
+      # Terraform Setup
+      # -----------------------------
+
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: ${{ env.TF_VERSION }}
 
+      # -----------------------------
+      # Terraform Init
+      # -----------------------------
+
       - name: Terraform Init
+        working-directory: ${{ env.WORKING_DIR }}
         run: terraform init
 
+      # -----------------------------
+      # Terraform Format
+      # -----------------------------
+
       - name: Terraform Format
+        working-directory: ${{ env.WORKING_DIR }}
         run: terraform fmt -check -recursive
 
+      # -----------------------------
+      # Terraform Validate
+      # -----------------------------
+
       - name: Terraform Validate
+        working-directory: ${{ env.WORKING_DIR }}
         run: terraform validate
 
+      # -----------------------------
+      # Terraform Plan
+      # -----------------------------
+
       - name: Terraform Plan
+        working-directory: ${{ env.WORKING_DIR }}
         run: terraform plan
 
 
   # =====================================================
   # AUTOMATIC PULL REQUEST
-  # Feature → main
+  # Feature -> main
   # =====================================================
 
   create-pr:
     name: Create Pull Request
+
     if: github.ref == 'refs/heads/Feature'
+
     needs: terraform-plan
+
     runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      pull-requests: write
 
     steps:
 
       - name: Create Pull Request
-        uses: peter-evans/create-pull-request@v7
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          base: main
-          branch: Feature
-          title: "Terraform: Feature → Main"
-          body: |
-            ## Terraform Pull Request
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-            This PR was automatically created by GitHub Actions.
-
-            ### Validation completed
-            - Terraform Format
-            - Terraform Validate
-            - TFLint
-            - tfsec
-            - Terraform Plan
-
-            Please review and merge this PR.
-          labels: |
-            terraform
-            automated-pr
+        run: |
+          if gh pr list \
+            --head Feature \
+            --base main \
+            --state open \
+            --json number \
+            --jq 'length' | grep -q '^0$'
+          then
+            gh pr create \
+              --base main \
+              --head Feature \
+              --title "Terraform: Feature → Main" \
+              --body "Automated Pull Request created after Terraform security scanning, validation and plan."
+          else
+            echo "Pull Request already exists. Skipping."
+          fi
 
 
   # =====================================================
-  # MAIN → PLAN + APPLY
+  # MAIN BRANCH
+  # Init -> Fmt -> Validate -> Scan -> Plan -> Apply
   # =====================================================
 
   terraform-apply:
     name: Terraform Plan and Apply - Main
+
     if: github.ref == 'refs/heads/main'
+
+    needs: terraform-scan
+
     runs-on: ubuntu-latest
 
     steps:
 
       - name: Checkout Code
         uses: actions/checkout@v4
+
+      # -----------------------------
+      # Azure Login
+      # -----------------------------
 
       - name: Azure Login
         uses: azure/login@v3
@@ -151,22 +207,51 @@ jobs:
               "subscriptionId": "2eeb0869-d474-4f94-a0b0-fb6a5d23d142"
             }
 
+      # -----------------------------
+      # Terraform Setup
+      # -----------------------------
+
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: ${{ env.TF_VERSION }}
 
+      # -----------------------------
+      # Terraform Init
+      # -----------------------------
+
       - name: Terraform Init
+        working-directory: ${{ env.WORKING_DIR }}
         run: terraform init
 
+      # -----------------------------
+      # Terraform Format
+      # -----------------------------
+
       - name: Terraform Format
+        working-directory: ${{ env.WORKING_DIR }}
         run: terraform fmt -check -recursive
 
+      # -----------------------------
+      # Terraform Validate
+      # -----------------------------
+
       - name: Terraform Validate
+        working-directory: ${{ env.WORKING_DIR }}
         run: terraform validate
 
+      # -----------------------------
+      # Terraform Plan
+      # -----------------------------
+
       - name: Terraform Plan
+        working-directory: ${{ env.WORKING_DIR }}
         run: terraform plan -out=tfplan
 
+      # -----------------------------
+      # Terraform Apply
+      # -----------------------------
+
       - name: Terraform Apply
+        working-directory: ${{ env.WORKING_DIR }}
         run: terraform apply -auto-approve tfplan
