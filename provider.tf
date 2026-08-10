@@ -1,17 +1,12 @@
 terraform {
-backend "azurerm" {
-resource_group_name = "topu"
-storage_account_name = "popu007"
-container_name = "kali"
-key = "actiontfstate"
-}
-required_providers {
-azurerm = {
-source = "hashicorp/azurerm"
-version = "4.78.0"
-}
-}
+
+  required_providers {
+    azurerm = {
+      source  = "hashicorp/azurerm"
+      version = "4.78.0"
+    }
+  }
 }
 provider "azurerm" {
-features {}
+  features {}
 }
