@@ -1,5 +1,5 @@
 
 resource "azurerm_resource_group" "this" {
-  name     = "bhopu"
+  name     = "bhakua"
   location = "central india"
 }
