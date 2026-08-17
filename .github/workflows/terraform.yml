@@ -96,35 +96,38 @@ jobs:
       # ========================================================
 
       - name: Create Pull Request
-        if: github.ref == 'refs/heads/Feature'
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
+  if: github.ref == 'refs/heads/Feature'
+  shell: powershell
+  env:
+    GH_TOKEN: ${{ github.token }}
+  run: |
+    Write-Host "===== CHECKING PULL REQUEST ====="
 
-          echo "===== CHECKING PULL REQUEST ====="
+    $PR_EXISTS = gh pr list `
+      --base main `
+      --head "$env:GITHUB_REF_NAME" `
+      --state open `
+      --json number `
+      --jq "length"
 
-          PR_EXISTS=$(gh pr list \
-            --base main \
-            --head "${GITHUB_REF_NAME}" \
-            --state open \
-            --json number \
-            --jq 'length')
+    Write-Host "Open PR count: $PR_EXISTS"
 
-          if [ "$PR_EXISTS" -eq 0 ]; then
+    if ([int]$PR_EXISTS -eq 0) {
 
-            echo "Creating Pull Request..."
+      Write-Host "Creating Pull Request..."
 
-            gh pr create \
-              --base main \
-              --head "${GITHUB_REF_NAME}" \
-              --title "Terraform changes - ${GITHUB_REF_NAME}" \
-              --body "Automated PR created after successful Security Scan and Terraform Plan."
+      gh pr create `
+        --base main `
+        --head "$env:GITHUB_REF_NAME" `
+        --title "Terraform changes - $env:GITHUB_REF_NAME" `
+        --body "Automated PR created after successful Security Scan and Terraform Plan."
 
-          else
+    }
+    else {
 
-            echo "Pull Request already exists."
+      Write-Host "Pull Request already exists."
 
-          fi
+    }
 
 
   # ============================================================
