@@ -1,17 +1,174 @@
-name: Pipeline-Test
+name: Terraform-DevSecOps
 
 on:
   push:
+    branches:
+      - Feature
+      - main
+
+permissions:
+  contents: write
+  pull-requests: write
+
+env:
+  TF_WORKING_DIR: ./git-conflict
 
 jobs:
-  test:
+
+  # ============================================================
+  # STAGE 1 - SECURITY SCAN
+  # ============================================================
+
+  security-scan:
+    name: Security Scan
     runs-on: self-hosted
 
     steps:
-      - name: Checkout
+
+      - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Test
+      - name: TFLint
+        working-directory: ${{ env.TF_WORKING_DIR }}
         run: |
-          echo "PIPELINE TRIGGERED"
-          echo "Branch: $GITHUB_REF_NAME"
+          echo "===== TFLINT ====="
+          tflint --init
+          tflint
+
+      - name: TFSEC
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        run: |
+          echo "===== TFSEC ====="
+          tfsec .
+
+      - name: Trivy
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        run: |
+          echo "===== TRIVY ====="
+          trivy config .
+
+
+  # ============================================================
+  # STAGE 2 - TERRAFORM PLAN
+  # ============================================================
+
+  terraform-plan:
+    name: Terraform Plan
+    runs-on: self-hosted
+
+    needs: security-scan
+
+    steps:
+
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      # Terraform Format
+      - name: Terraform Format
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        run: |
+          echo "===== TERRAFORM FMT ====="
+          terraform fmt -check -recursive
+
+      # Terraform Init
+      - name: Terraform Init
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        run: |
+          echo "===== TERRAFORM INIT ====="
+          terraform init
+
+      # Terraform Validate
+      - name: Terraform Validate
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        run: |
+          echo "===== TERRAFORM VALIDATE ====="
+          terraform validate
+
+      # Terraform Plan
+      - name: Terraform Plan
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        run: |
+          echo "===== TERRAFORM PLAN ====="
+          terraform plan
+
+      # ========================================================
+      # CREATE PR ONLY FROM FEATURE BRANCH
+      # ========================================================
+
+      - name: Create Pull Request
+        if: github.ref == 'refs/heads/Feature'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+
+          echo "===== CHECKING PULL REQUEST ====="
+
+          PR_EXISTS=$(gh pr list \
+            --base main \
+            --head "${GITHUB_REF_NAME}" \
+            --state open \
+            --json number \
+            --jq 'length')
+
+          if [ "$PR_EXISTS" -eq 0 ]; then
+
+            echo "Creating Pull Request..."
+
+            gh pr create \
+              --base main \
+              --head "${GITHUB_REF_NAME}" \
+              --title "Terraform changes - ${GITHUB_REF_NAME}" \
+              --body "Automated PR created after successful Security Scan and Terraform Plan."
+
+          else
+
+            echo "Pull Request already exists."
+
+          fi
+
+
+  # ============================================================
+  # STAGE 3 - TERRAFORM APPLY
+  # ONLY AFTER MERGE TO MAIN
+  # ============================================================
+
+  terraform-apply:
+    name: Terraform Apply
+    runs-on: self-hosted
+
+    needs: terraform-plan
+
+    if: github.ref == 'refs/heads/main'
+
+    # ==========================================================
+    # MANUAL APPROVAL
+    # ==========================================================
+
+    environment:
+      name: terraform-approval
+
+    steps:
+
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      # Terraform Init
+      - name: Terraform Init
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        run: |
+          echo "===== TERRAFORM INIT ====="
+          terraform init
+
+      # Terraform Validate
+      - name: Terraform Validate
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        run: |
+          echo "===== TERRAFORM VALIDATE ====="
+          terraform validate
+
+      # Terraform Apply
+      - name: Terraform Apply
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        run: |
+          echo "===== TERRAFORM APPLY ====="
+          terraform apply -auto-approve
