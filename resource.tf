@@ -1,6 +1,6 @@
 
 resource "azurerm_resource_group" "rg" {
-  name     = "security-rg"
+  name     = "runner-rg"
   location = "central india"
 }
 
