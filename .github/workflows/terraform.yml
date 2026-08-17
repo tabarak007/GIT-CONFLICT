@@ -30,21 +30,24 @@ jobs:
 
       - name: TFLint
         working-directory: ${{ env.TF_WORKING_DIR }}
+        shell: powershell
         run: |
-          echo "===== TFLINT ====="
+          Write-Host "===== TFLINT ====="
           tflint --init
           tflint
 
       - name: TFSEC
         working-directory: ${{ env.TF_WORKING_DIR }}
+        shell: powershell
         run: |
-          echo "===== TFSEC ====="
+          Write-Host "===== TFSEC ====="
           tfsec .
 
       - name: Trivy
         working-directory: ${{ env.TF_WORKING_DIR }}
+        shell: powershell
         run: |
-          echo "===== TRIVY ====="
+          Write-Host "===== TRIVY ====="
           trivy config .
 
 
@@ -63,71 +66,71 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      # Terraform Format
       - name: Terraform Format
         working-directory: ${{ env.TF_WORKING_DIR }}
+        shell: powershell
         run: |
-          echo "===== TERRAFORM FMT ====="
+          Write-Host "===== TERRAFORM FMT ====="
           terraform fmt -check -recursive
 
-      # Terraform Init
       - name: Terraform Init
         working-directory: ${{ env.TF_WORKING_DIR }}
+        shell: powershell
         run: |
-          echo "===== TERRAFORM INIT ====="
+          Write-Host "===== TERRAFORM INIT ====="
           terraform init
 
-      # Terraform Validate
       - name: Terraform Validate
         working-directory: ${{ env.TF_WORKING_DIR }}
+        shell: powershell
         run: |
-          echo "===== TERRAFORM VALIDATE ====="
+          Write-Host "===== TERRAFORM VALIDATE ====="
           terraform validate
 
-      # Terraform Plan
       - name: Terraform Plan
         working-directory: ${{ env.TF_WORKING_DIR }}
+        shell: powershell
         run: |
-          echo "===== TERRAFORM PLAN ====="
+          Write-Host "===== TERRAFORM PLAN ====="
           terraform plan
 
       # ========================================================
-      # CREATE PR ONLY FROM FEATURE BRANCH
+      # CREATE PULL REQUEST
       # ========================================================
 
       - name: Create Pull Request
-  if: github.ref == 'refs/heads/Feature'
-  shell: powershell
-  env:
-    GH_TOKEN: ${{ github.token }}
-  run: |
-    Write-Host "===== CHECKING PULL REQUEST ====="
+        if: github.ref == 'refs/heads/Feature'
+        shell: powershell
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          Write-Host "===== CHECKING PULL REQUEST ====="
 
-    $PR_EXISTS = gh pr list `
-      --base main `
-      --head "$env:GITHUB_REF_NAME" `
-      --state open `
-      --json number `
-      --jq "length"
+          $PR_EXISTS = gh pr list `
+            --base main `
+            --head "$env:GITHUB_REF_NAME" `
+            --state open `
+            --json number `
+            --jq "length"
 
-    Write-Host "Open PR count: $PR_EXISTS"
+          Write-Host "Open PR count: $PR_EXISTS"
 
-    if ([int]$PR_EXISTS -eq 0) {
+          if ([int]$PR_EXISTS -eq 0) {
 
-      Write-Host "Creating Pull Request..."
+            Write-Host "Creating Pull Request..."
 
-      gh pr create `
-        --base main `
-        --head "$env:GITHUB_REF_NAME" `
-        --title "Terraform changes - $env:GITHUB_REF_NAME" `
-        --body "Automated PR created after successful Security Scan and Terraform Plan."
+            gh pr create `
+              --base main `
+              --head "$env:GITHUB_REF_NAME" `
+              --title "Terraform changes - $env:GITHUB_REF_NAME" `
+              --body "Automated PR created after successful Security Scan and Terraform Plan."
 
-    }
-    else {
+          }
+          else {
 
-      Write-Host "Pull Request already exists."
+            Write-Host "Pull Request already exists."
 
-    }
+          }
 
 
   # ============================================================
@@ -143,10 +146,6 @@ jobs:
 
     if: github.ref == 'refs/heads/main'
 
-    # ==========================================================
-    # MANUAL APPROVAL
-    # ==========================================================
-
     environment:
       name: terraform-approval
 
@@ -155,23 +154,23 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      # Terraform Init
       - name: Terraform Init
         working-directory: ${{ env.TF_WORKING_DIR }}
+        shell: powershell
         run: |
-          echo "===== TERRAFORM INIT ====="
+          Write-Host "===== TERRAFORM INIT ====="
           terraform init
 
-      # Terraform Validate
       - name: Terraform Validate
         working-directory: ${{ env.TF_WORKING_DIR }}
+        shell: powershell
         run: |
-          echo "===== TERRAFORM VALIDATE ====="
+          Write-Host "===== TERRAFORM VALIDATE ====="
           terraform validate
 
-      # Terraform Apply
       - name: Terraform Apply
         working-directory: ${{ env.TF_WORKING_DIR }}
+        shell: powershell
         run: |
-          echo "===== TERRAFORM APPLY ====="
+          Write-Host "===== TERRAFORM APPLY ====="
           terraform apply -auto-approve
