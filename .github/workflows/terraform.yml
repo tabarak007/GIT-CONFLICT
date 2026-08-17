@@ -25,29 +25,54 @@ jobs:
 
     steps:
 
+      # ----------------------------------------------------------
+      # Checkout
+      # ----------------------------------------------------------
+
       - name: Checkout Code
         uses: actions/checkout@v4
+
+      # ----------------------------------------------------------
+      # TFLint
+      # ----------------------------------------------------------
 
       - name: TFLint
         working-directory: ${{ env.TF_WORKING_DIR }}
         shell: powershell
         run: |
-          Write-Host "===== TFLINT ====="
+          Write-Host "========================================="
+          Write-Host "             TFLINT SCAN"
+          Write-Host "========================================="
+
           tflint --init
           tflint
+
+      # ----------------------------------------------------------
+      # TFSEC
+      # ----------------------------------------------------------
 
       - name: TFSEC
         working-directory: ${{ env.TF_WORKING_DIR }}
         shell: powershell
         run: |
-          Write-Host "===== TFSEC ====="
+          Write-Host "========================================="
+          Write-Host "             TFSEC SCAN"
+          Write-Host "========================================="
+
           tfsec .
+
+      # ----------------------------------------------------------
+      # Trivy
+      # ----------------------------------------------------------
 
       - name: Trivy
         working-directory: ${{ env.TF_WORKING_DIR }}
         shell: powershell
         run: |
-          Write-Host "===== TRIVY ====="
+          Write-Host "========================================="
+          Write-Host "             TRIVY SCAN"
+          Write-Host "========================================="
+
           trivy config .
 
 
@@ -63,79 +88,181 @@ jobs:
 
     steps:
 
+      # ----------------------------------------------------------
+      # Checkout
+      # ----------------------------------------------------------
+
       - name: Checkout Code
         uses: actions/checkout@v4
+
+      # ----------------------------------------------------------
+      # Terraform Format
+      # ----------------------------------------------------------
 
       - name: Terraform Format
         working-directory: ${{ env.TF_WORKING_DIR }}
         shell: powershell
         run: |
-          Write-Host "===== TERRAFORM FMT ====="
+          Write-Host "========================================="
+          Write-Host "          TERRAFORM FORMAT"
+          Write-Host "========================================="
+
           terraform fmt -check -recursive
+
+      # ----------------------------------------------------------
+      # Terraform Init
+      # ----------------------------------------------------------
 
       - name: Terraform Init
         working-directory: ${{ env.TF_WORKING_DIR }}
         shell: powershell
         run: |
-          Write-Host "===== TERRAFORM INIT ====="
+          Write-Host "========================================="
+          Write-Host "            TERRAFORM INIT"
+          Write-Host "========================================="
+
           terraform init
+
+      # ----------------------------------------------------------
+      # Terraform Validate
+      # ----------------------------------------------------------
 
       - name: Terraform Validate
         working-directory: ${{ env.TF_WORKING_DIR }}
         shell: powershell
         run: |
-          Write-Host "===== TERRAFORM VALIDATE ====="
+          Write-Host "========================================="
+          Write-Host "          TERRAFORM VALIDATE"
+          Write-Host "========================================="
+
           terraform validate
+
+      # ----------------------------------------------------------
+      # Terraform Plan
+      # ----------------------------------------------------------
 
       - name: Terraform Plan
         working-directory: ${{ env.TF_WORKING_DIR }}
         shell: powershell
         run: |
-          Write-Host "===== TERRAFORM PLAN ====="
+          Write-Host "========================================="
+          Write-Host "            TERRAFORM PLAN"
+          Write-Host "========================================="
+
           terraform plan
 
       # ========================================================
       # CREATE PULL REQUEST
+      # Only Feature branch
       # ========================================================
 
       - name: Create Pull Request
         if: github.ref == 'refs/heads/Feature'
         shell: powershell
+
         env:
           GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          BRANCH: ${{ github.ref_name }}
+
         run: |
-          Write-Host "===== CHECKING PULL REQUEST ====="
 
-          $PR_EXISTS = gh pr list `
-            --base main `
-            --head "$env:GITHUB_REF_NAME" `
-            --state open `
-            --json number `
-            --jq "length"
+          Write-Host "========================================="
+          Write-Host "       CHECKING PULL REQUEST"
+          Write-Host "========================================="
 
-          Write-Host "Open PR count: $PR_EXISTS"
+          # ----------------------------------------------------
+          # GitHub API Headers
+          # ----------------------------------------------------
 
-          if ([int]$PR_EXISTS -eq 0) {
+          $headers = @{
+            Authorization = "Bearer $env:GH_TOKEN"
+            Accept = "application/vnd.github+json"
+            "X-GitHub-Api-Version" = "2022-11-28"
+          }
 
+          # ----------------------------------------------------
+          # Check Existing PR
+          # ----------------------------------------------------
+
+          $uri = "https://api.github.com/repos/$env:REPO/pulls?state=open&head=$env:REPO`:$env:BRANCH&base=main"
+
+          $existingPR = Invoke-RestMethod `
+            -Uri $uri `
+            -Headers $headers `
+            -Method Get
+
+          if ($existingPR.Count -eq 0) {
+
+            Write-Host "No open Pull Request found."
             Write-Host "Creating Pull Request..."
 
-            gh pr create `
-              --base main `
-              --head "$env:GITHUB_REF_NAME" `
-              --title "Terraform changes - $env:GITHUB_REF_NAME" `
-              --body "Automated PR created after successful Security Scan and Terraform Plan."
+            # --------------------------------------------------
+            # PR Body
+            # --------------------------------------------------
+
+            $body = @{
+              title = "Terraform changes - $env:BRANCH"
+              head = $env:BRANCH
+              base = "main"
+              body = @"
+          Automated Pull Request
+
+          Validation completed successfully:
+
+          Security Scan:
+          - TFLint
+          - TFSEC
+          - Trivy
+
+          Terraform:
+          - terraform fmt
+          - terraform init
+          - terraform validate
+          - terraform plan
+
+          Please review and approve the Pull Request.
+          "@
+            } | ConvertTo-Json
+
+            # --------------------------------------------------
+            # Create PR
+            # --------------------------------------------------
+
+            $createUri = "https://api.github.com/repos/$env:REPO/pulls"
+
+            $pr = Invoke-RestMethod `
+              -Uri $createUri `
+              -Headers $headers `
+              -Method Post `
+              -Body $body `
+              -ContentType "application/json"
+
+            Write-Host ""
+            Write-Host "========================================="
+            Write-Host "   PULL REQUEST CREATED SUCCESSFULLY"
+            Write-Host "========================================="
+            Write-Host "PR Number : $($pr.number)"
+            Write-Host "PR URL    : $($pr.html_url)"
+            Write-Host "========================================="
 
           }
           else {
 
-            Write-Host "Pull Request already exists."
+            Write-Host ""
+            Write-Host "========================================="
+            Write-Host "       PULL REQUEST ALREADY EXISTS"
+            Write-Host "========================================="
+            Write-Host "PR Number : $($existingPR[0].number)"
+            Write-Host "PR URL    : $($existingPR[0].html_url)"
+            Write-Host "========================================="
 
           }
 
 
   # ============================================================
   # STAGE 3 - TERRAFORM APPLY
-  # ONLY AFTER MERGE TO MAIN
+  # Only after merge to MAIN
   # ============================================================
 
   terraform-apply:
@@ -146,31 +273,60 @@ jobs:
 
     if: github.ref == 'refs/heads/main'
 
+    # ----------------------------------------------------------
+    # Manual Approval Environment
+    # ----------------------------------------------------------
+
     environment:
       name: terraform-approval
 
     steps:
 
+      # ----------------------------------------------------------
+      # Checkout
+      # ----------------------------------------------------------
+
       - name: Checkout Code
         uses: actions/checkout@v4
+
+      # ----------------------------------------------------------
+      # Terraform Init
+      # ----------------------------------------------------------
 
       - name: Terraform Init
         working-directory: ${{ env.TF_WORKING_DIR }}
         shell: powershell
         run: |
-          Write-Host "===== TERRAFORM INIT ====="
+          Write-Host "========================================="
+          Write-Host "            TERRAFORM INIT"
+          Write-Host "========================================="
+
           terraform init
+
+      # ----------------------------------------------------------
+      # Terraform Validate
+      # ----------------------------------------------------------
 
       - name: Terraform Validate
         working-directory: ${{ env.TF_WORKING_DIR }}
         shell: powershell
         run: |
-          Write-Host "===== TERRAFORM VALIDATE ====="
+          Write-Host "========================================="
+          Write-Host "          TERRAFORM VALIDATE"
+          Write-Host "========================================="
+
           terraform validate
+
+      # ----------------------------------------------------------
+      # Terraform Apply
+      # ----------------------------------------------------------
 
       - name: Terraform Apply
         working-directory: ${{ env.TF_WORKING_DIR }}
         shell: powershell
         run: |
-          Write-Host "===== TERRAFORM APPLY ====="
+          Write-Host "========================================="
+          Write-Host "            TERRAFORM APPLY"
+          Write-Host "========================================="
+
           terraform apply -auto-approve
