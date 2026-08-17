@@ -11,7 +11,7 @@ permissions:
   pull-requests: write
 
 env:
-  TF_WORKING_DIR: ./git-conflict
+  TF_WORKING_DIR: .
 
 jobs:
 
