@@ -3,7 +3,7 @@ name: Terraform-DevSecOps
 on:
   push:
     branches:
-      - "feature/**"
+      - "Feature/**"
       - main
 
 permissions:
@@ -11,7 +11,7 @@ permissions:
   pull-requests: write
 
 env:
-  TF_WORKING_DIR: ./GIT-CONFLICT
+  TF_WORKING_DIR: .
 
 jobs:
 
